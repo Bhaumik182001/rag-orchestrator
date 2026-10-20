@@ -5,28 +5,26 @@ networks:
     driver: bridge
 
 services:
-  # 1. Isolated Vector Database
   postgres-vector:
     image: pgvector/pgvector:pg16
     container_name: enterprise-vector-db
     environment:
-      - POSTGRES_USER=raguser
-      - POSTGRES_PASSWORD=ragpass
-      - POSTGRES_DB=rag_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5433:5432" # Exposed only for your pgAdmin debugging
+      - "5433:5432"
     volumes:
       - pgvector_data:/var/lib/postgresql/data
     networks:
       - private-vpc-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U raguser -d rag_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # 2. Spring Boot Orchestrator Microservice
   orchestrator-app:
     build:
       context: ./orchestrator
@@ -37,10 +35,9 @@ services:
     environment:
       - DB_HOST=postgres-vector
       - DB_PORT=5432
-      - DB_NAME=rag_db
-      - DB_USER=raguser
-      - DB_PASSWORD=ragpass
-      # Points to Ollama running on your Windows host machine with GPU acceleration
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
       - OLLAMA_URL=http://host.docker.internal:11434
     depends_on:
       postgres-vector:
