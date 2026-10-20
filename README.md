@@ -17,7 +17,7 @@ This project implements an enterprise-grade VPC deployment pattern, bridging con
 
 The system mirrors an Enterprise Virtual Private Cloud (VPC) deployment. The application layer and database layer are isolated within a private Docker bridge network, while AI embedding and generation tasks are routed through a zero-retention local engine.
 
-```
+```text
                               ┌───────────────────────────────────────────────┐
                               │            Windows Host / GPU Layer           │
                               │                                               │
@@ -56,6 +56,7 @@ The system mirrors an Enterprise Virtual Private Cloud (VPC) deployment. The app
 
 ### 1. The Ingestion Pipeline (ETL & Vectorization)
 
+- **Ephemeral Git Cloning:** Utilizes Eclipse JGit to perform shallow clones of remote repositories into temporary directories, extracts and indexes supported source files, and immediately purges the cloned files to ensure zero persistent storage footprint.
 - **File System Traversal:** Recursively scans repositories while applying two-stage exclusion filters (`.git`, `.metadata`, `node_modules`, `target`, `bin`, and hidden dot-directories).
 - **Token Slicing:** Uses Spring AI's `TokenTextSplitter` to segment source code (`.java`, `.ts`, `.tsx`, `.sql`, `.md`, `.properties`) into 500-token chunks with 100-token overlap to maintain structural context.
 - **Vector Transformation:** Dispatches batches to local `nomic-embed-text` to generate high-dimensional floating-point embeddings.
@@ -75,6 +76,7 @@ The system mirrors an Enterprise Virtual Private Cloud (VPC) deployment. The app
 - **Language:** Java 21
 - **Framework:** Spring Boot 3.x / 4.x, Spring AI
 - **Database:** PostgreSQL 16 with `pgvector`
+- **Version Control:** Eclipse JGit (Pure Java Git implementation)
 - **Local LLM Host:** Ollama
   - **Embedding Model:** `nomic-embed-text` (~250 MB)
   - **Generation Model:** `llama3.2` (3B parameters, 4-bit quantized)
@@ -104,6 +106,8 @@ git clone https://github.com/<your-username>/rag-orchestrator.git
 cd rag-orchestrator
 ```
 
+_(Ensure you have created your `.env` file from the `.env.example` template)._
+
 ### 2. Launch the Stack via Docker Compose
 
 Run the single-command deployment:
@@ -127,20 +131,19 @@ You should see:
 
 ## 🔌 API Reference
 
-### 1. Ingest a Codebase
+### 1. Ingest a Remote Git Repository
 
-Initiates directory extraction, tokenization, embedding, and vector storage.
+Clones a repository, chunks the source code, and saves the vectors to PostgreSQL.
 
-- **Endpoint:** `POST /api/ingest`
+- **Endpoint:** `POST /api/ingest/git`
 - **Query Parameters:**
-  - `path` _(string)_: Absolute path to the directory on the machine.
-  - `projectName` _(string)_: Metadata tag associated with the ingested chunks.
+  - `gitUrl` _(string)_: The HTTPS URL of the Git repository.
+  - `projectName` _(string)_: Optional metadata tag. Auto-derived if omitted.
 
 **Example Request:**
 
-```http
-POST /api/ingest?path=D:/Projects/my-app/src&projectName=MyApp HTTP/1.1
-Host: localhost:8080
+```bash
+curl -X POST "http://localhost:8080/api/ingest/git?gitUrl=https://github.com/spring-projects/spring-petclinic.git&projectName=PetClinic"
 ```
 
 **Example Response:**
@@ -148,14 +151,33 @@ Host: localhost:8080
 ```json
 {
   "status": "SUCCESS",
-  "project": "MyApp",
-  "chunksIngested": 18
+  "gitUrl": "https://github.com/spring-projects/spring-petclinic.git",
+  "project": "PetClinic",
+  "chunksIngested": 184
 }
 ```
 
 ---
 
-### 2. Query the Codebase
+### 2. Ingest a Local Directory
+
+Initiates directory extraction, tokenization, embedding, and vector storage from a local disk path. _(Note: When running via Docker, paths must be mounted via volumes)._
+
+- **Endpoint:** `POST /api/ingest`
+- **Query Parameters:**
+  - `path` _(string)_: Absolute path to the directory.
+  - `projectName` _(string)_: Metadata tag associated with the ingested chunks.
+
+**Example Request:**
+
+```http
+POST /api/ingest?path=/workspace/my-app/src&projectName=MyApp HTTP/1.1
+Host: localhost:8080
+```
+
+---
+
+### 3. Query the Codebase (RAG Chat)
 
 Searches the vector store using cosine similarity and returns a grounded answer.
 
