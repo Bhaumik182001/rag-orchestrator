@@ -1,0 +1,11 @@
+target/
+*.class
+.metadata/
+.settings/
+.project
+.classpath
+.vscode/
+.idea/
+*.iml
+pgvector_data/
+.env
